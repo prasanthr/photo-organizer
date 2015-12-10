@@ -1,7 +1,7 @@
 Photo Organizer Script
 ----------------------
 
-   The script maintains all your photos in a specific structure and makes downloading and organizing of newp hotos easy. 
+   The script maintains all your photos in a pre-determined structure and makes downloading and organizing of new photos easy. 
 
 Usage
 -----
