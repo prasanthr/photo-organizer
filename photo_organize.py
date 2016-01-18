@@ -135,10 +135,10 @@ def organize(sourceFolder, destinationFolder):
         for fn in filenames:
             if fn.startswith(".") or fn == "Thumbs.db":
                 continue
-            extension = os.path.splitext(fn)[1]
+            extension = os.path.splitext(fn)[1][1:]
             if not extension:
                 continue
-            if extension.lower in ACCEPTED_EXTENSIONS:
+            if extension.lower() in ACCEPTED_EXTENSIONS:
                 totalMediaFiles+=1
             else:
                 unProcessableFiles.append(dirpath + "/" + fn)
@@ -163,12 +163,13 @@ def organize(sourceFolder, destinationFolder):
                 print "File ", sourceFilePath, " is duplicate, skipping"
                 duplicateFiles+=1
             else:
-                print "File ", sourceFilePath, " exists at source, but contents are different.. renaming and copying"
+                print "File ", sourceFilePath, " exists at destination, but contents are different.. renaming and copying"
                 fileName, fileExtension = os.path.splitext(destFilePath)
                 destFilePath = fileName + "_" + str(random.randint(1, 1000)) + fileExtension
                 shutil.copy2(sourceFilePath, destFilePath)
                 copiedFiles+=1
         else:
+            print "Copying ", sourceFilePath, " to ", destFilePath
             shutil.copy2(sourceFilePath, destFilePath)
             copiedFiles+=1    
               
@@ -177,12 +178,13 @@ def organize(sourceFolder, destinationFolder):
     if not os.path.isdir(unSortedFilePath):
             os.makedirs(unSortedFilePath) 
     for srcFilePath in unProcessableFiles:
+        print "Copying ", srcFilePath, " to ", unSortedFilePath
         shutil.copy2(srcFilePath, unSortedFilePath)
 
+    print "\n\n"
     print "Total number of image files found ", totalMediaFiles
     print  copiedFiles, " were copied to appropriate location"
     print  duplicateFiles, " were duplicates and not copied"
-    print "\n\n"
     print len(unProcessableFiles), " number of unprocessable files were copied to misc location ", 
 
     
