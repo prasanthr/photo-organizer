@@ -19,16 +19,73 @@ Organization is like this
 
 '''
 
-import sys
-import os
-import exifread
+import sys, os
 import shutil, filecmp, subprocess
-import random
-import re
-import json
+import random, hashlib
+import re, json
+import pickle
 
 EXIF_TOOL_PATH="/usr/local/bin/exiftool"
 ACCEPTED_EXTENSIONS = [ "jpg", "png", "mov"]
+IGNORED_FILES = ["thumbs.db"]
+HASH_INDEX_FILE = ".picdb"
+
+
+def getHash(filePath):
+    #hasher = hashlib.md5()
+    hasher = hashlib.new("md5")
+    with open(filePath, 'rb') as afile:
+        buf = afile.read()
+        hasher.update(buf)
+        return hasher.hexdigest()        
+    return None
+
+
+def createHashIndex(destinationFolder, recreate = False):
+    
+    for dirpath, dirnames, filenames in os.walk(destinationFolder):        
+        #print dirpath, dirnames, filenames
+        print "considering  ", dirpath
+        
+        #get the list of all files
+        allFiles = [] 
+        for fn in filenames:
+            if fn.startswith(".") or fn.lower() in IGNORED_FILES:
+                continue
+            allFiles.append(fn)
+                
+        #see if this is a proper folder with images
+        isImageFolder = False
+        for fn in allFiles:
+            extension = os.path.splitext(fn)[1][1:]
+            if extension.lower() in ACCEPTED_EXTENSIONS:
+                isImageFolder = True
+                break
+        if not isImageFolder:
+            print "Is not a image folder"
+            continue
+        
+        print "Computing hash-index for the folder"
+        #get the existing map
+        hashEntries = {}
+        hashFilePath = dirpath + "/" + HASH_INDEX_FILE
+        if not recreate and os.path.isfile(hashFilePath):
+            with open(hashFilePath, 'rb') as f:
+                hashEntries = pickle.load(f)
+            
+        needsRefresh = False    
+        for fn in allFiles:
+            filePath = dirpath + "/" +  fn
+            if fn not in hashEntries:
+                hashEntries[fn] = getHash(filePath)
+                needsRefresh = True
+                
+        if needsRefresh:
+            with open(hashFilePath, 'wb') as f:
+                pickle.dump(hashEntries, f) 
+        else:
+            print "no changes are needed for hash-index"
+
 
 #  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
 class ExifTool(object):
@@ -108,47 +165,69 @@ def getMetadataMap(srcFolder):
     return metadataMap
 
 
-#
-def createDestFolderMap(destinationFolder): 
-    folderMap = {}
-    yearMonthPattern = re.compile(r"\S+/(\d\d\d\d)/(\d\d)\-?(\w*)$")
-    for dirpath, dirnames, filenames in os.walk(destinationFolder):        
-        match = yearMonthPattern.match(dirpath) 
-        if match:
-            year = match.group(1)
-            month = match.group(2)
-            #print "year=", year, "month=", month
-            folderMap[year+month] = dirpath
-    return folderMap
-
 def organize(sourceFolder, destinationFolder):
     
-
+    #create/update hash-index map of the destination folder
+    
+    print "Loading all Hash entries ....."
+    allHashEntries = {}
+    #create the hash-index map of all the files key=hash, value=full-path
+    #get the files first
+    allHashFiles = []
+    for dirpath, dirnames, filenames in os.walk(destinationFolder): 
+        hashFilePath = dirpath + "/" + HASH_INDEX_FILE
+        if os.path.isfile(hashFilePath):
+            allHashFiles.append(hashFilePath)            
+    #load them with progress bar
+    allHashFilesCt = len(allHashFiles)
+    print "Total image folders: ", allHashFilesCt
+    for idx, hashFile in enumerate(allHashFiles):
+        dirpath = os.path.dirname(hashFile)
+        with open(hashFile, 'rb') as f:
+            hashIndexMap = pickle.load(f)
+            for fn_hash in hashIndexMap.items():
+                allHashEntries[fn_hash[1]] = dirpath + "/" + fn_hash[0]
+               
+        # progress bar
+        numdots = int(20.0*(idx+1)/allHashFilesCt)
+        sys.stdout.write('\r')
+        sys.stdout.write('[%-20s] %d of %d ' % ('='*numdots, idx+1, allHashFilesCt))
+        sys.stdout.flush()
+    print ".... done"
+                
     duplicateFiles=0
     copiedFiles=0
-    
-    # As a safety check, get the total number of media files and list of unProcessableFiles in the folder
+        
+    # First, go through all files and pick the media files and unprocessable files
     unProcessableFiles = []
-    totalMediaFiles=0
+    allMediaFiles=[]
     for dirpath, dirnames, filenames in os.walk(sourceFolder):        
         #print dirpath, dirnames, filenames 
         for fn in filenames:
-            if fn.startswith(".") or fn == "Thumbs.db":
+            if fn.startswith(".") or fn.lower() in IGNORED_FILES:
                 continue
             extension = os.path.splitext(fn)[1][1:]
             if not extension:
                 continue
             if extension.lower() in ACCEPTED_EXTENSIONS:
-                totalMediaFiles+=1
+                allMediaFiles.append(dirpath + "/" + fn)
             else:
                 unProcessableFiles.append(dirpath + "/" + fn)
                 
     for fileMetadata in getMetadataMap(sourceFolder).items():
         
         sourceFilePath = fileMetadata[0][1] + "/" + fileMetadata[0][0]
+        if sourceFilePath not in allMediaFiles: continue                
         if not fileMetadata[1]:
             if sourceFilePath not in unProcessableFiles:
                 unProcessableFiles.append(sourceFilePath)
+                
+        #get the hash and check for duplicates
+        fileHash = getHash(sourceFilePath)    
+        if fileHash in allHashEntries:
+            print "This file already exists in the destination [", allHashEntries[fileHash], "]"
+            duplicateFiles+=1
+            continue    
         
         year =   fileMetadata[1][0]       
         month =   fileMetadata[1][1]
@@ -182,18 +261,20 @@ def organize(sourceFolder, destinationFolder):
         shutil.copy2(srcFilePath, unSortedFilePath)
 
     print "\n\n"
-    print "Total number of image files found ", totalMediaFiles
+    print "Total number of image files found ", len(allMediaFiles)
     print  copiedFiles, " were copied to appropriate location"
     print  duplicateFiles, " were duplicates and not copied"
     print len(unProcessableFiles), " number of unprocessable files were copied to misc location ", 
 
     
-    
-
 if __name__ == '__main__':
     sourceFolder = sys.argv[1]
     destFolder = sys.argv[2]
+    if sourceFolder[-1] == "/": sourceFolder = sourceFolder[:-1]
+    if destFolder[-1] == "/": destFolder = destFolder[:-1]
+    print "\nCreating a hash-index map of the destination, ", destFolder, " (This may take a while for large folders)..."
+    createHashIndex(destFolder, False)    
+    print " ... hash-index create/update done\n\n"
     print "Copying photos from ", sourceFolder, " to ", destFolder
     organize(sourceFolder, destFolder)  
-        
-        
+                
