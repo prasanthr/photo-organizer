@@ -43,9 +43,23 @@ def getHash(filePath):
 
 def createHashIndex(destinationFolder, recreate = False):
     
-    for dirpath, dirnames, filenames in os.walk(destinationFolder):        
+    #fetch and store the walk result in-order to estimate the time
+    osWalkResult = []
+    for item in os.walk(destinationFolder):
+        osWalkResult.append(item)
+        
+    totalFolders=len(osWalkResult)
+    currentFolderIndex=1
+    for dirpath, dirnames, filenames in osWalkResult:        
         #print dirpath, dirnames, filenames
-        print "considering  ", dirpath
+        #print "considering  ", dirpath
+        
+        # progress bar
+        currentFolderIndex+=1
+        numdots = int(20.0*(currentFolderIndex+1)/totalFolders)
+        sys.stdout.write('\r')
+        sys.stdout.write('[%-20s] %d of %d ' % ('='*numdots, currentFolderIndex+1, totalFolders))
+        sys.stdout.flush()
         
         #get the list of all files
         allFiles = [] 
@@ -62,10 +76,10 @@ def createHashIndex(destinationFolder, recreate = False):
                 isImageFolder = True
                 break
         if not isImageFolder:
-            print "Is not a image folder"
+            #print "Is not a image folder"
             continue
         
-        print "Computing hash-index for the folder"
+        #print "Computing hash-index for the folder"
         #get the existing map
         hashEntries = {}
         hashFilePath = dirpath + "/" + HASH_INDEX_FILE
@@ -83,8 +97,10 @@ def createHashIndex(destinationFolder, recreate = False):
         if needsRefresh:
             with open(hashFilePath, 'wb') as f:
                 pickle.dump(hashEntries, f) 
-        else:
-            print "no changes are needed for hash-index"
+        #else:
+            #print "no changes are needed for hash-index"
+            
+               
 
 
 #  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
@@ -225,7 +241,7 @@ def organize(sourceFolder, destinationFolder):
         #get the hash and check for duplicates
         fileHash = getHash(sourceFilePath)    
         if fileHash in allHashEntries:
-            print "This file already exists in the destination [", allHashEntries[fileHash], "]"
+            print "This file ", sourceFilePath[ len(sourceFolder): ], " already exists in the destination [", allHashEntries[fileHash][len(destinationFolder):], "]"
             duplicateFiles+=1
             continue    
         
