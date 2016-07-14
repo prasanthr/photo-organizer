@@ -1,21 +1,19 @@
 '''
-Created on Oct 17, 2014
 
 @author: Prasanth Ram
 
- photo_organize.py <source-folder> <destination-folder>
+ python photo_organize.py <source-folder> <destination-folder>
 
- Reads files one by one from the source folder, then puts it into appropriate place
- destination folder
+ source-folder contains the photos you want to sort and organize
+ destination-folder your already organized photo folder
 
-Organization is like this
+  It is advised (though not mandatory) that you arrange your already sorted photo folder in the following structure
 
-    - year (ex. 2012)
-             - [month-number]-[Optional-description]
-             
-             
-       description should contain only alphanumeric chars and _
-       if there are more than one folder for the same month, image will be copied to one randomly selected folder
+    - year 
+         - [month-number]-[Optional-description]
+            - photo1.jpg
+            - photo2.jpg
+            
 
 '''
 
@@ -284,6 +282,9 @@ def organize(sourceFolder, destinationFolder):
 
     
 if __name__ == '__main__':
+    if len(sys.argv) != 3:
+        print "Usage: python photo_organize.py <source-folder> <destination-folder>"
+        sys.exit(-1)
     sourceFolder = sys.argv[1]
     destFolder = sys.argv[2]
     if sourceFolder[-1] == "/": sourceFolder = sourceFolder[:-1]
